@@ -12,6 +12,10 @@ import { calculate_cost, estimate_tokens, calculate_carbon } from './cost_calcul
 import { OptimizationManager } from './optimization/manager';
 import { LoopDetector } from './optimization/detectors/loop_detector';
 import { PatternDetector } from './optimization/detectors/pattern_detector';
+import { ComplexityDetector } from './optimization/detectors/complexity_detector';
+import { RegionDetector } from './optimization/detectors/region_detector';
+import { CacheDetector } from './optimization/detectors/cache_detector';
+import { BudgetDetector } from './optimization/detectors/budget_detector';
 import { OptimizationSuggestion } from './optimization/types';
 import { CostCodeActionProvider } from './code_action_provider';
 import { CostDecorationProvider } from './decoration_provider';
@@ -115,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 1. Scan Config Files (Found by glob)
     // Cache the glob result? For now, glob is relatively fast, but reading is slow.
-    const configFiles = await vscode.workspace.findFiles('**/*.{tf,yml,yaml,json}', '**/node_modules/**');
+    const configFiles = await vscode.workspace.findFiles('**/*.{tf,tfvars,yml,yaml,json,env,toml}', '**/node_modules/**');
     await processFilesFast(configFiles);
 
     // 2. Scan Code Files (from graph)
@@ -233,7 +237,31 @@ export function activate(context: vscode.ExtensionContext) {
     const optManager = OptimizationManager.getInstance();
     optManager.registerDetector(new LoopDetector());
     optManager.registerDetector(new PatternDetector());
-    console.log('✨ Optimization Manager initialized with detectors');
+    optManager.registerDetector(new ComplexityDetector());
+    optManager.registerDetector(new RegionDetector());
+    optManager.registerDetector(new CacheDetector());
+    const budgetDetector = new BudgetDetector();
+    optManager.registerDetector(budgetDetector);
+    console.log('✨ Optimization Manager initialized with 6 detectors (incl. Complexity, Region, Cache, Budget)');
+
+    // Watch for .astra.json changes to reload budget config
+    const astraConfigWatcher = vscode.workspace.createFileSystemWatcher('**/.astra.json');
+    astraConfigWatcher.onDidChange(async () => {
+      console.log('📋 .astra.json changed, reloading config...');
+      await budgetDetector.reloadConfig();
+      await updateTreeviewWithAllCalls();
+    });
+    astraConfigWatcher.onDidCreate(async () => {
+      console.log('📋 .astra.json created, loading config...');
+      await budgetDetector.reloadConfig();
+      await updateTreeviewWithAllCalls();
+    });
+    astraConfigWatcher.onDidDelete(async () => {
+      console.log('📋 .astra.json deleted, clearing config...');
+      await budgetDetector.reloadConfig();
+      await updateTreeviewWithAllCalls();
+    });
+    context.subscriptions.push(astraConfigWatcher);
 
     // Run initial workspace indexing in background
     vscode.window.withProgress({
