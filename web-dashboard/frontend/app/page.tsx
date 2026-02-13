@@ -141,6 +141,70 @@ export default function LandingPage() {
             </div>
           </section>
 
+          {/* Blockchain Features */}
+          <section className="space-y-6 mt-20">
+            <div className="space-y-3 text-center">
+              <div className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[var(--foreground-secondary)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Ethereum Sepolia · IPFS · Verifiable
+              </div>
+              <h3 className="text-3xl font-extrabold text-[var(--foreground)] text-center">
+                Blockchain{" "}
+                <span className="bg-gradient-to-r from-emerald-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  Sustainability
+                </span>
+              </h3>
+              <p className="text-[var(--foreground-secondary)] text-center max-w-2xl mx-auto">
+                Immutable carbon records, green incentive tokens, and decentralized data — all on-chain
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <Link href="/carbon" className="blockchain-card blockchain-card-green glass rounded-2xl p-7 border border-[var(--glass-border)] hover:border-emerald-500/30 group">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                  <Activity className="w-7 h-7 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-bold text-[var(--foreground)] mb-1.5 group-hover:text-emerald-400 transition-colors">Carbon Reports</h3>
+                <p className="text-sm text-[var(--foreground-secondary)] leading-relaxed mb-4">
+                  SHA-256 hashed, IPFS pinned, Ethereum verified carbon footprint records.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400/80">SHA-256</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400/80">IPFS</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400/80">Sepolia</span>
+                </div>
+              </Link>
+
+              <Link href="/incentives" className="blockchain-card blockchain-card-amber glass rounded-2xl p-7 border border-[var(--glass-border)] hover:border-amber-500/30 group">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/15 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                  <Zap className="w-7 h-7 text-amber-400" />
+                </div>
+                <h3 className="text-lg font-bold text-[var(--foreground)] mb-1.5 group-hover:text-amber-400 transition-colors">Green Score</h3>
+                <p className="text-sm text-[var(--foreground-secondary)] leading-relaxed mb-4">
+                  Earn green points and claim ERC-20 tokens & NFT achievement badges.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400/80">ERC-20</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400/80">NFT Badges</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400/80">Leaderboard</span>
+                </div>
+              </Link>
+
+              <Link href="/registry" className="blockchain-card blockchain-card-blue glass rounded-2xl p-7 border border-[var(--glass-border)] hover:border-blue-500/30 group">
+                <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/15 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                  <ListOrdered className="w-7 h-7 text-blue-400" />
+                </div>
+                <h3 className="text-lg font-bold text-[var(--foreground)] mb-1.5 group-hover:text-blue-400 transition-colors">Carbon Registry</h3>
+                <p className="text-sm text-[var(--foreground-secondary)] leading-relaxed mb-4">
+                  Community-verified carbon benchmarks for AI models and cloud regions.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400/80">Crowd-Sourced</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400/80">Voted</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400/80">On-Chain</span>
+                </div>
+              </Link>
+            </div>
+          </section>
         </div>
       </main>
 

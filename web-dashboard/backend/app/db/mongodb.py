@@ -14,7 +14,12 @@ class MongoDB:
         if not settings.mongodb_uri:
             raise ValueError("MONGODB_URI environment variable is required")
         
-        cls.client = AsyncIOMotorClient(settings.mongodb_uri)
+        cls.client = AsyncIOMotorClient(
+            settings.mongodb_uri,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=5000,
+        )
         print(f"✅ Connected to MongoDB")
     
     @classmethod

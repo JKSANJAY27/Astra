@@ -33,6 +33,18 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
     
+    # Blockchain (Ethereum Sepolia)
+    blockchain_rpc_url: Optional[str] = os.getenv("BLOCKCHAIN_RPC_URL")
+    blockchain_private_key: Optional[str] = os.getenv("BLOCKCHAIN_PRIVATE_KEY")
+    carbon_contract_address: Optional[str] = os.getenv("CARBON_CONTRACT_ADDRESS")
+    token_contract_address: Optional[str] = os.getenv("TOKEN_CONTRACT_ADDRESS")
+    badge_contract_address: Optional[str] = os.getenv("BADGE_CONTRACT_ADDRESS")
+    registry_contract_address: Optional[str] = os.getenv("REGISTRY_CONTRACT_ADDRESS")
+    
+    # IPFS (Pinata)
+    pinata_api_key: Optional[str] = os.getenv("PINATA_API_KEY")
+    pinata_secret_key: Optional[str] = os.getenv("PINATA_SECRET_KEY")
+    
     # RAG Configuration
     rag_top_k: int = 3  # Number of documents to retrieve
     

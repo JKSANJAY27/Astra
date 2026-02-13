@@ -276,3 +276,203 @@ export async function uploadToCanvas(file: File): Promise<CanvasUploadResponse> 
         throw error;
     }
 }
+
+// ==========================================
+// Carbon Accountability API
+// ==========================================
+
+import type {
+    CarbonReportResponse,
+    SustainabilityScore,
+    LeaderboardEntry,
+    BadgeDefinition,
+    RegistryEntry,
+    RegistryStats,
+} from "./types";
+
+export async function generateCarbonReport(
+    architectureJson: any,
+    region: string = "us-east-1",
+    userId?: string
+): Promise<CarbonReportResponse> {
+    const response = await fetch(`${API_BASE_URL}/carbon/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            architecture_json: architectureJson,
+            region,
+            user_id: userId,
+        }),
+    });
+    if (!response.ok) throw new Error(`Carbon report failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getCarbonReport(reportId: string): Promise<CarbonReportResponse> {
+    const response = await fetch(`${API_BASE_URL}/carbon/report/${reportId}`);
+    if (!response.ok) throw new Error(`Get report failed: ${response.status}`);
+    return response.json();
+}
+
+export async function commitReportOnChain(reportId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/carbon/report/${reportId}/commit`, {
+        method: "POST",
+    });
+    if (!response.ok) throw new Error(`Commit failed: ${response.status}`);
+    return response.json();
+}
+
+export async function verifyReport(reportHash: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/carbon/verify/${reportHash}`);
+    if (!response.ok) throw new Error(`Verify failed: ${response.status}`);
+    return response.json();
+}
+
+export async function listCarbonReports(limit = 20, skip = 0): Promise<CarbonReportResponse[]> {
+    const response = await fetch(`${API_BASE_URL}/carbon/reports?limit=${limit}&skip=${skip}`);
+    if (!response.ok) throw new Error(`List reports failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getRegionCarbonData(): Promise<Record<string, number>> {
+    const response = await fetch(`${API_BASE_URL}/carbon/regions`);
+    if (!response.ok) throw new Error(`Get regions failed: ${response.status}`);
+    return response.json();
+}
+
+// ==========================================
+// Incentive Token API
+// ==========================================
+
+export async function calculateSustainabilityScore(
+    currentCarbonKg: number,
+    previousCarbonKg?: number,
+    region?: string,
+    previousRegion?: string,
+    userId?: string
+): Promise<SustainabilityScore> {
+    const response = await fetch(`${API_BASE_URL}/incentives/score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            current_carbon_kg: currentCarbonKg,
+            previous_carbon_kg: previousCarbonKg,
+            region,
+            previous_region: previousRegion,
+            user_id: userId,
+        }),
+    });
+    if (!response.ok) throw new Error(`Score failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getUserPoints(userId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/incentives/points/${userId}`);
+    if (!response.ok) throw new Error(`Get points failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getLeaderboard(limit = 20): Promise<LeaderboardEntry[]> {
+    const response = await fetch(`${API_BASE_URL}/incentives/leaderboard?limit=${limit}`);
+    if (!response.ok) throw new Error(`Leaderboard failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getAllBadges(): Promise<BadgeDefinition[]> {
+    const response = await fetch(`${API_BASE_URL}/incentives/badges`);
+    if (!response.ok) throw new Error(`Get badges failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getUserBadges(userId: string): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/incentives/badges/${userId}`);
+    if (!response.ok) throw new Error(`Get user badges failed: ${response.status}`);
+    return response.json();
+}
+
+export async function claimReward(
+    userId: string,
+    walletAddress: string,
+    claimType: "tokens" | "badge",
+    badgeId?: string,
+    tokenAmount?: number
+): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/incentives/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            user_id: userId,
+            wallet_address: walletAddress,
+            claim_type: claimType,
+            badge_id: badgeId,
+            token_amount: tokenAmount,
+        }),
+    });
+    if (!response.ok) throw new Error(`Claim failed: ${response.status}`);
+    return response.json();
+}
+
+// ==========================================
+// Carbon Registry API
+// ==========================================
+
+export async function getRegistryEntries(
+    entryType?: string,
+    status?: string,
+    search?: string,
+    limit = 20,
+    skip = 0
+): Promise<RegistryEntry[]> {
+    const params = new URLSearchParams();
+    if (entryType) params.set("entry_type", entryType);
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    params.set("limit", String(limit));
+    params.set("skip", String(skip));
+
+    const response = await fetch(`${API_BASE_URL}/registry/entries?${params}`);
+    if (!response.ok) throw new Error(`Registry list failed: ${response.status}`);
+    return response.json();
+}
+
+export async function submitRegistryEntry(
+    entryType: string,
+    data: { name: string; description: string; value: number; unit: string; source?: string },
+    submitter = "anonymous"
+): Promise<RegistryEntry> {
+    const response = await fetch(`${API_BASE_URL}/registry/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry_type: entryType, data, submitter }),
+    });
+    if (!response.ok) throw new Error(`Submit failed: ${response.status}`);
+    return response.json();
+}
+
+export async function voteOnEntry(entryId: string, voterId: string, vote: "approve" | "reject"): Promise<RegistryEntry> {
+    const response = await fetch(`${API_BASE_URL}/registry/entries/${entryId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voter_id: voterId, vote }),
+    });
+    if (!response.ok) throw new Error(`Vote failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getRegistryBenchmarks(): Promise<RegistryEntry[]> {
+    const response = await fetch(`${API_BASE_URL}/registry/benchmarks`);
+    if (!response.ok) throw new Error(`Benchmarks failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getRegistryRegions(): Promise<RegistryEntry[]> {
+    const response = await fetch(`${API_BASE_URL}/registry/regions`);
+    if (!response.ok) throw new Error(`Regions failed: ${response.status}`);
+    return response.json();
+}
+
+export async function getRegistryStats(): Promise<RegistryStats> {
+    const response = await fetch(`${API_BASE_URL}/registry/stats`);
+    if (!response.ok) throw new Error(`Stats failed: ${response.status}`);
+    return response.json();
+}
