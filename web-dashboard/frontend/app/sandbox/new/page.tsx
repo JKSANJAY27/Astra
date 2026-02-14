@@ -21,6 +21,7 @@ export default function Home() {
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [tempName, setTempName] = React.useState(projectName);
   const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
+  const [sidebarWidth, setSidebarWidth] = React.useState(384); // Default 384px (w-96)
 
   const handleLoadFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -29,7 +30,7 @@ export default function Home() {
         alert("Please select a valid .json project file.");
         return;
       }
-      
+
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as string;
@@ -152,13 +153,6 @@ export default function Home() {
             Save
           </button>
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--background-tertiary)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-sm transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import Project
-          </button>
-          <button
             onClick={handleClearCanvas}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--error)]/20 hover:bg-[var(--error)]/30 border border-[var(--error)]/30 text-[var(--error)] text-sm transition-colors"
           >
@@ -173,13 +167,6 @@ export default function Home() {
             <Share2 className="w-4 h-4" />
             Publish
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleLoadFile}
-            className="hidden"
-          />
         </div>
       </header>
 
@@ -205,8 +192,14 @@ export default function Home() {
         </div>
 
         {/* Right Sidebar - Cost, Suggestions, Chat */}
-        <div className="w-96 flex-shrink-0">
-          <RightSidebar />
+        <div
+          className="flex-shrink-0"
+          style={{ width: sidebarWidth }}
+        >
+          <RightSidebar
+            width={sidebarWidth}
+            onWidthChange={setSidebarWidth}
+          />
         </div>
       </div>
 

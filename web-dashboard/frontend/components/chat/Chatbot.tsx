@@ -1,20 +1,35 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useArchitectureStore } from "@/lib/store";
-import { Send, Bot, User, Trash2 } from "lucide-react";
+import { Send, Bot, User, Trash2, Paperclip, X, FileText, Sparkles, Upload, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { generateId } from "@/lib/utils";
-import { sendChatMessage, clearSession } from "@/lib/api";
+import { sendChatMessage, clearSession, uploadToCanvas, uploadDocument, UploadDocumentResponse } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
+
+interface UploadedFileStatus {
+    name: string;
+    status: "success" | "error";
+    message?: string;
+}
 
 export default function Chatbot() {
     const {
         chatMessages, addChatMessage, sessionId, setSessionId,
-        nodes, edges, scope, clearChat, setNodes, setEdges, updateScope
+        nodes, edges, scope, clearChat, setNodes, setEdges, updateScope, loadFromFile
     } = useArchitectureStore();
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
+
+    // Upload state
+    const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [uploadMode, setUploadMode] = useState<"canvas" | "knowledge" | "import">("canvas");
+    const [isUploading, setIsUploading] = useState(false);
+    const [lastUploadStatus, setLastUploadStatus] = useState<UploadedFileStatus | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -32,18 +47,91 @@ export default function Chatbot() {
                     await clearSession(sessionId);
                 }
                 clearChat();
+                setLastUploadStatus(null);
             } catch (error) {
                 console.error("Failed to clear session:", error);
-                // Still clear local chat if backend fails
                 clearChat();
             }
         }
     };
 
+    const handleFile = useCallback(async (file: File) => {
+        setLastUploadStatus(null);
+
+        // JSON Import Logic
+        if (uploadMode === "import") {
+            if (!file.name.endsWith(".json")) {
+                setLastUploadStatus({ name: file.name, status: "error", message: "Only .json files allowed for import" });
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target?.result as string;
+                    JSON.parse(content); // Validate
+                    loadFromFile(content);
+                    setLastUploadStatus({ name: file.name, status: "success", message: "Project imported successfully" });
+                    setIsUploadOpen(false); // Close panel on success
+                } catch (error) {
+                    setLastUploadStatus({ name: file.name, status: "error", message: "Invalid JSON project file" });
+                }
+            };
+            reader.readAsText(file);
+            return;
+        }
+
+        // Document Upload Logic (Canvas / Knowledge)
+        const allowed = [".pdf", ".docx", ".doc", ".txt"];
+        const ext = "." + file.name.split(".").pop()?.toLowerCase();
+        if (!allowed.includes(ext)) {
+            setLastUploadStatus({ name: file.name, status: "error", message: `Unsupported type: ${ext}` });
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            if (uploadMode === "canvas") {
+                // Upload & Visualize
+                const result = await uploadToCanvas(file);
+                if (result.architecture) {
+                    setNodes(result.architecture.nodes || []);
+                    setEdges(result.architecture.edges || []);
+                }
+                setLastUploadStatus({
+                    name: file.name,
+                    status: "success",
+                    message: `Generated ${result.components_found.length} components from doc`
+                });
+            } else {
+                // Upload to Knowledge Base
+                const result: UploadDocumentResponse = await uploadDocument(file);
+                setLastUploadStatus({
+                    name: file.name,
+                    status: "success",
+                    message: `Added to context (${result.chunks_added} chunks)`
+                });
+            }
+        } catch (error) {
+            setLastUploadStatus({
+                name: file.name,
+                status: "error",
+                message: error instanceof Error ? error.message : "Upload failed"
+            });
+        } finally {
+            setIsUploading(false);
+        }
+    }, [uploadMode, loadFromFile, setNodes, setEdges]);
+
+    const onDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        const file = e.dataTransfer.files?.[0];
+        if (file) handleFile(file);
+    }, [handleFile]);
+
     const handleSend = async () => {
         if (!input.trim()) return;
 
-        // Add user message
         const userMessage = {
             id: generateId(),
             role: "user" as const,
@@ -56,17 +144,9 @@ export default function Chatbot() {
         setIsTyping(true);
 
         try {
-            // Include current architecture context
-            const currentArchitecture = {
-                nodes,
-                edges,
-                scope
-            };
-
-            // Measure chat width
+            const currentArchitecture = { nodes, edges, scope };
             const chatWidth = chatContainerRef.current?.offsetWidth || 400;
 
-            // Call backend API with chat width
             const response = await sendChatMessage(
                 currentInput,
                 sessionId,
@@ -74,15 +154,10 @@ export default function Chatbot() {
                 chatWidth
             );
 
-            // Update session ID if new
             if (response.session_id && response.session_id !== sessionId) {
                 setSessionId(response.session_id);
             }
 
-            // Log the full response for debugging
-            console.log("📦 Backend Response:", response);
-
-            // Add AI response
             const aiMessage = {
                 id: generateId(),
                 role: "assistant" as const,
@@ -91,24 +166,16 @@ export default function Chatbot() {
             };
             addChatMessage(aiMessage);
 
-            // Handle canvas actions
             if (response.canvas_action === "update" && response.updated_architecture) {
-                // Update the architecture on the canvas
                 setNodes(response.updated_architecture.nodes || []);
                 setEdges(response.updated_architecture.edges || []);
-                console.log("✅ Canvas updated with new architecture");
             } else if (response.canvas_action === "clear") {
-                // Clear the canvas
                 setNodes([]);
                 setEdges([]);
-
-                console.log("🗑️ Canvas cleared");
             }
 
-            // Handle scope updates
             if (response.updated_scope) {
                 updateScope(response.updated_scope);
-                console.log("📊 Scope updated:", response.updated_scope);
             }
         } catch (error) {
             console.error("Failed to get chat response:", error);
@@ -125,8 +192,9 @@ export default function Chatbot() {
     };
 
     return (
-        <div ref={chatContainerRef} className="flex flex-col h-full">
-            <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
+        <div ref={chatContainerRef} className="flex flex-col h-full relative">
+            {/* Header */}
+            <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--background-secondary)] z-10">
                 <div>
                     <div className="flex items-center gap-2">
                         <Bot className="w-5 h-5 text-[var(--primary)]" />
@@ -134,9 +202,6 @@ export default function Chatbot() {
                             AI Assistant
                         </h3>
                     </div>
-                    <p className="text-xs text-[var(--foreground-secondary)] mt-1">
-                        Ask questions about your architecture
-                    </p>
                 </div>
                 {chatMessages.length > 0 && (
                     <button
@@ -148,6 +213,82 @@ export default function Chatbot() {
                     </button>
                 )}
             </div>
+
+            {/* Collapsible Upload Section */}
+            {isUploadOpen && (
+                <div className="border-b border-[var(--border)] bg-[var(--background-secondary)] shadow-lg animate-in slide-in-from-top-2 duration-200">
+                    <div className="p-3 space-y-3">
+                        {/* Mode Toggle */}
+                        <div className="flex rounded-lg border border-[var(--border)] overflow-hidden bg-[var(--background)]">
+                            <button
+                                onClick={() => setUploadMode("canvas")}
+                                className={cn("flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+                                    uploadMode === "canvas" ? "bg-[var(--primary)] text-white" : "text-[var(--foreground-secondary)] hover:bg-[var(--background-tertiary)]"
+                                )}
+                            >
+                                <Sparkles className="w-3 h-3" /> Visualize
+                            </button>
+                            <button
+                                onClick={() => setUploadMode("knowledge")}
+                                className={cn("flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+                                    uploadMode === "knowledge" ? "bg-[var(--primary)] text-white" : "text-[var(--foreground-secondary)] hover:bg-[var(--background-tertiary)]"
+                                )}
+                            >
+                                <FileText className="w-3 h-3" /> Knowledge
+                            </button>
+                            <button
+                                onClick={() => setUploadMode("import")}
+                                className={cn("flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+                                    uploadMode === "import" ? "bg-[var(--primary)] text-white" : "text-[var(--foreground-secondary)] hover:bg-[var(--background-tertiary)]"
+                                )}
+                            >
+                                <Upload className="w-3 h-3" /> Import
+                            </button>
+                        </div>
+
+                        {/* Drop Zone */}
+                        <div
+                            onDrop={onDrop}
+                            onDragOver={(e) => e.preventDefault()}
+                            onClick={() => fileInputRef.current?.click()}
+                            className={cn(
+                                "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors relative",
+                                isUploading ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-[var(--background-tertiary)]"
+                            )}
+                        >
+                            {isUploading ? (
+                                <Loader2 className="w-6 h-6 text-[var(--primary)] animate-spin mx-auto" />
+                            ) : (
+                                <Upload className="w-6 h-6 text-[var(--foreground-secondary)] mx-auto" />
+                            )}
+                            <p className="text-xs text-[var(--foreground-secondary)] mt-2">
+                                {isUploading ? "Processing..." : uploadMode === "import" ? "Drop .json project file" : "Drop PDF, DOCX, TXT"}
+                            </p>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept={uploadMode === "import" ? ".json" : ".pdf,.docx,.doc,.txt"}
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleFile(file);
+                                    if (fileInputRef.current) fileInputRef.current.value = "";
+                                }}
+                                className="hidden"
+                            />
+                        </div>
+
+                        {/* Status Message */}
+                        {lastUploadStatus && (
+                            <div className={cn("text-xs p-2 rounded flex items-center gap-2",
+                                lastUploadStatus.status === "success" ? "bg-[var(--success)]/10 text-[var(--success)]" : "bg-[var(--error)]/10 text-[var(--error)]"
+                            )}>
+                                {lastUploadStatus.status === "success" ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                                <span className="truncate flex-1">{lastUploadStatus.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -165,12 +306,6 @@ export default function Chatbot() {
                                 💡 How should I structure my backend?
                             </button>
                             <button
-                                onClick={() => setInput("What's the best database for my use case?")}
-                                className="block w-full text-left px-3 py-2 rounded-lg bg-[var(--background-tertiary)] hover:bg-[var(--background)] border border-[var(--border)] text-xs text-[var(--foreground)] transition-colors"
-                            >
-                                💾 What's the best database for my use case?
-                            </button>
-                            <button
                                 onClick={() => setInput("How can I reduce costs?")}
                                 className="block w-full text-left px-3 py-2 rounded-lg bg-[var(--background-tertiary)] hover:bg-[var(--background)] border border-[var(--border)] text-xs text-[var(--foreground)] transition-colors"
                             >
@@ -181,69 +316,28 @@ export default function Chatbot() {
                 ) : (
                     <>
                         {chatMessages.map((message) => (
-                            <div
-                                key={message.id}
-                                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"
-                                    }`}
-                            >
+                            <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                                 {message.role === "assistant" && (
                                     <div className="w-8 h-8 rounded-full bg-[var(--primary)]/20 flex items-center justify-center flex-shrink-0">
                                         <Bot className="w-4 h-4 text-[var(--primary)]" />
                                     </div>
                                 )}
-                                <div
-                                    className={`max-w-[80%] px-4 py-2 rounded-xl ${message.role === "user"
-                                        ? "bg-[#99f6e4] text-black"
-                                        : "glass border border-[var(--glass-border)] text-[var(--foreground)]"
-                                        }`}
-                                >
-                                    <div className="text-sm prose prose-sm max-w-none prose-invert">
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                // Custom styling for markdown elements
-                                                code: (props: any) => {
-                                                    const { children, className, node, inline, ...rest } = props;
-
-                                                    // Robust inline detection
-                                                    // 1. If inline prop is explicitly boolean, trust it
-                                                    // 2. Fallback: check if content has newlines (block) or language class (block)
-                                                    let isInline = inline;
-
-                                                    if (typeof isInline !== 'boolean') {
-                                                        const content = String(children).trim();
-                                                        const hasNewlines = content.includes('\n');
-                                                        const hasLangClass = /language-(\w+)/.test(className || "");
-                                                        isInline = !hasNewlines && !hasLangClass;
-                                                    }
-
-                                                    return isInline ? (
-                                                        <code className="px-1.5 py-0.5 rounded bg-black/20 text-[var(--accent)] font-mono text-xs" {...rest}>
-                                                            {children}
-                                                        </code>
-                                                    ) : (
-                                                        <code className="block px-3 py-2 rounded-lg bg-black/30 text-[var(--foreground)] font-mono text-xs overflow-x-auto my-2" {...rest}>
-                                                            {children}
-                                                        </code>
-                                                    );
-                                                },
-                                                pre: ({ children }) => <div className="my-2">{children}</div>,
-                                                ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>,
-                                                ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>,
-                                                li: ({ children }) => <li className="text-sm">{children}</li>,
-                                                p: ({ children }) => <p className="my-1">{children}</p>,
-                                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                                em: ({ children }) => <em className="italic">{children}</em>,
-                                                a: ({ children, href }) => (
-                                                    <a href={href} className="text-[var(--accent)] hover:underline" target="_blank" rel="noopener noreferrer">
-                                                        {children}
-                                                    </a>
-                                                ),
-                                            }}
-                                        >
-                                            {message.content}
-                                        </ReactMarkdown>
-                                    </div>
+                                <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${message.role === "user" ? "bg-[#99f6e4] text-black" : "glass border border-[var(--glass-border)] text-[var(--foreground)]"}`}>
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{
+                                            code: ({ inline, className, children, ...props }: any) => {
+                                                const match = /language-(\w+)/.exec(className || "");
+                                                return !inline && match ? (
+                                                    <code className="block bg-black/30 p-2 rounded text-xs overflow-x-auto my-1" {...props}>{children}</code>
+                                                ) : (
+                                                    <code className="bg-black/20 px-1 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        {message.content}
+                                    </ReactMarkdown>
                                 </div>
                                 {message.role === "user" && (
                                     <div className="w-8 h-8 rounded-full bg-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
@@ -259,22 +353,33 @@ export default function Chatbot() {
                                 </div>
                                 <div className="glass border border-[var(--glass-border)] px-4 py-2 rounded-xl">
                                     <div className="flex gap-1">
-                                        <div className="w-2 h-2 rounded-full bg-[var(--foreground-secondary)] animate-pulse" />
-                                        <div className="w-2 h-2 rounded-full bg-[var(--foreground-secondary)] animate-pulse delay-100" />
-                                        <div className="w-2 h-2 rounded-full bg-[var(--foreground-secondary)] animate-pulse delay-200" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--foreground-secondary)] animate-pulse" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--foreground-secondary)] animate-pulse delay-100" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--foreground-secondary)] animate-pulse delay-200" />
                                     </div>
                                 </div>
                             </div>
                         )}
-                        {/* Invisible element to scroll to */}
                         <div ref={messagesEndRef} />
                     </>
                 )}
             </div>
 
             {/* Input */}
-            <div className="p-4 border-t border-[var(--border)]">
+            <div className="p-3 border-t border-[var(--border)] bg-[var(--background-secondary)]">
                 <div className="flex gap-2">
+                    <button
+                        onClick={() => setIsUploadOpen(!isUploadOpen)}
+                        className={cn(
+                            "p-2 rounded-lg transition-colors flex-shrink-0 border",
+                            isUploadOpen
+                                ? "bg-[var(--primary)]/20 border-[var(--primary)] text-[var(--primary)]"
+                                : "bg-[var(--background)] border-[var(--border)] text-[var(--foreground-secondary)] hover:text-[var(--foreground)]"
+                        )}
+                        title="Attach file / Import project"
+                    >
+                        <Paperclip className="w-4 h-4" />
+                    </button>
                     <input
                         type="text"
                         value={input}
@@ -286,7 +391,7 @@ export default function Chatbot() {
                     <button
                         onClick={handleSend}
                         disabled={!input.trim()}
-                        className="px-4 py-2 rounded-lg bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 py-2 rounded-lg bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Send className="w-4 h-4" />
                     </button>

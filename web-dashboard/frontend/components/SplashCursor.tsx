@@ -1089,7 +1089,25 @@ export default function SplashCursor({
       return radius;
     }
 
-    function updatePointerDownData(pointer: Pointer, id: number, posX: number, posY: number) {
+    function updatePointerDownData(
+      pointer: Pointer,
+      id: number,
+      posX: number,
+      posY: number,
+      event?: MouseEvent | TouchEvent
+    ) {
+      if (event) {
+        const target = event.target as HTMLElement;
+        const isInteractive = target.closest(
+          "button, a, input, textarea, select, [role='button'], .card, .glass, .blockchain-card, .interactive"
+        );
+        if (isInteractive) {
+          pointer.id = -1;
+          pointer.down = false;
+          return;
+        }
+      }
+
       pointer.id = id;
       pointer.down = true;
       pointer.moved = false;
@@ -1102,13 +1120,34 @@ export default function SplashCursor({
       pointer.color = generateColor();
     }
 
-    function updatePointerMoveData(pointer: Pointer, posX: number, posY: number, color: ColorRGB) {
+    function updatePointerMoveData(
+      pointer: Pointer,
+      posX: number,
+      posY: number,
+      color: ColorRGB,
+      event?: MouseEvent | TouchEvent
+    ) {
+      if (event) {
+        const target = event.target as HTMLElement;
+        const isInteractive = target.closest(
+          "button, a, input, textarea, select, [role='button'], .card, .glass, .blockchain-card, .interactive"
+        );
+        if (isInteractive) {
+          pointer.down = false;
+          return;
+        }
+      }
+
       pointer.prevTexcoordX = pointer.texcoordX;
       pointer.prevTexcoordY = pointer.texcoordY;
       pointer.texcoordX = posX / canvas!.width;
       pointer.texcoordY = 1 - posY / canvas!.height;
       pointer.deltaX = correctDeltaX(pointer.texcoordX - pointer.prevTexcoordX)!;
       pointer.deltaY = correctDeltaY(pointer.texcoordY - pointer.prevTexcoordY)!;
+      // Use pointer.down to track if we should be "moving" (splashing)
+      // or just updating position. 
+      // Original logic: pointer.moved = Math.abs(pointer.deltaX) > 0 || Math.abs(pointer.deltaY) > 0;
+      // We'll keep original logic but effective only if not interactive
       pointer.moved = Math.abs(pointer.deltaX) > 0 || Math.abs(pointer.deltaY) > 0;
       pointer.color = color;
     }
@@ -1192,7 +1231,7 @@ export default function SplashCursor({
       const pointer = pointers[0];
       const posX = scaleByPixelRatio(e.clientX);
       const posY = scaleByPixelRatio(e.clientY);
-      updatePointerDownData(pointer, -1, posX, posY);
+      updatePointerDownData(pointer, -1, posX, posY, e);
       clickSplat(pointer);
     });
 
@@ -1212,7 +1251,7 @@ export default function SplashCursor({
       const posX = scaleByPixelRatio(e.clientX);
       const posY = scaleByPixelRatio(e.clientY);
       const color = pointer.color;
-      updatePointerMoveData(pointer, posX, posY, color);
+      updatePointerMoveData(pointer, posX, posY, color, e);
     });
 
     function handleFirstTouchStart(e: TouchEvent) {
@@ -1236,7 +1275,8 @@ export default function SplashCursor({
         for (let i = 0; i < touches.length; i++) {
           const posX = scaleByPixelRatio(touches[i].clientX);
           const posY = scaleByPixelRatio(touches[i].clientY);
-          updatePointerDownData(pointer, touches[i].identifier, posX, posY);
+          // Touch events on mobile usually mean direct interaction, so we pass e
+          updatePointerDownData(pointer, touches[i].identifier, posX, posY, e);
         }
       },
       false
@@ -1250,7 +1290,7 @@ export default function SplashCursor({
         for (let i = 0; i < touches.length; i++) {
           const posX = scaleByPixelRatio(touches[i].clientX);
           const posY = scaleByPixelRatio(touches[i].clientY);
-          updatePointerMoveData(pointer, posX, posY, pointer.color);
+          updatePointerMoveData(pointer, posX, posY, pointer.color, e);
         }
       },
       false
